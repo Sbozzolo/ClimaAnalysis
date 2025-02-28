@@ -197,35 +197,68 @@ the seasons are March to May, June to August, September to November, and Decembe
 February. The order of the vector is MAM, JJA, SON, and DJF. If there are no dates found for
 a season, then the `OutputVar` for that season will be an empty `OutputVar`.
 
-```@julia split_by_season
-julia> attribs = Dict("start_date" => "2024-1-1");
+```@setup split_by_season
+import ClimaAnalysis
+import OrderedCollections: OrderedDict
 
-julia> time = [0.0, 5_184_000.0, 13_132_800.0]; # correspond to dates 2024-1-1, 2024-3-1, 2024-6-1
+attribs = Dict("start_date" => "2024-1-1");
+time = [0.0, 5_184_000.0, 13_132_800.0]; # correspond to dates 2024-1-1, 2024-3-1, 2024-6-1
+dims = OrderedDict(["time" => time]);
+dim_attribs = OrderedDict(["time" => Dict("units" => "s")]); # unit is second
+data = [1.0, 2.0, 3.0];
+var = ClimaAnalysis.OutputVar(attribs, dims, dim_attribs, data);
+```
 
-julia> dims = OrderedDict(["time" => time]);
+```@repl split_by_season
+var.attributes
+ClimaAnalysis.times(var) # correspond to dates 2024-1-1, 2024-3-1, 2024-6-1
+var.data
+MAM, JJA, SON, DJF = ClimaAnalysis.split_by_season(var);
+ClimaAnalysis.isempty(SON) # empty OutputVar because no dates between September to November
+[MAM.dims["time"], JJA.dims["time"], DJF.dims["time"]]
+[MAM.data, JJA.data, DJF.data]
+```
 
-julia> dim_attribs = OrderedDict(["time" => Dict("units" => "s")]); # unit is second
+It may be the case that you want to split seasons, but also want to retain the order that
+the seasons appear in across time. This can be done by using `split_by_season_across_time`.
+See the example below.
 
-julia> data = [1.0, 2.0, 3.0];
+```@setup split_by_season_across_time
+import ClimaAnalysis
+import OrderedCollections: OrderedDict
 
-julia> var = ClimaAnalysis.OutputVar(attribs, dims, dim_attribs, data);
+lon = collect(range(-179.5, 179.5, 36))
+lat = collect(range(-89.5, 89.5, 18))
+time = [0.0]
+push!(time, 5_184_000.0) # correspond to 2024-3-1
+push!(time, 13_132_800.0) # correspond to 2024-6-1
+push!(time, 21_081_600.0) # correspond to 2024-9-1
+push!(time, 28_944_000.0) # correspond to 2024-12-1
 
-julia> MAM, JJA, SON, DJF = ClimaAnalysis.split_by_season(var);
+data = reshape(
+    1.0:1.0:(length(lat) * length(time) * length(lon)),
+    (length(lat), length(time), length(lon)),
+)
+dims = OrderedDict(["lat" => lat, "time" => time, "lon" => lon])
+attribs = Dict("long_name" => "hi", "start_date" => "2024-1-1")
+dim_attribs = OrderedDict([
+    "lat" => Dict("units" => "deg"),
+    "time" => Dict("units" => "s"),
+    "lon" => Dict("units" => "deg"),
+])
+var = ClimaAnalysis.OutputVar(attribs, dims, dim_attribs, data)
+```
 
-julia> ClimaAnalysis.isempty(SON) # empty OutputVar because no dates between September to November
-true
-
-julia> [MAM.dims["time"], JJA.dims["time"], DJF.dims["time"]]
-3-element Vector{Vector{Float64}}:
- [5.184e6]
- [1.31328e7]
- [0.0]
-
-julia> [MAM.data, JJA.data, DJF.data]
-3-element Vector{Vector{Float64}}:
- [2.0]
- [3.0]
- [1.0]
+```@repl split_by_season_across_time
+var.attributes["start_date"]
+ClimaAnalysis.times(var) # dates from January, March, June, August, and December
+split_var = ClimaAnalysis.split_by_season_across_time(var);
+length(split_var) # months span over 5 seasons
+ClimaAnalysis.times(split_var[1]) # correspond to 1/1 (middle of DJF)
+ClimaAnalysis.times(split_var[2]) # correspond to 3/1 (start of MAM)
+ClimaAnalysis.times(split_var[3]) # correspond to 6/1 (start of JJA)
+ClimaAnalysis.times(split_var[4]) # correspond to 9/1 (start of SON)
+ClimaAnalysis.times(split_var[5]) # correspond to 12/1 (start of DJF)
 ```
 
 ## Bias and squared error

@@ -4,6 +4,7 @@ export match_nc_filename,
     squeeze, nearest_index, kwargs, seconds_to_prettystr, warp_string
 
 import Dates
+import OrderedCollections: OrderedDict
 
 """
     match_nc_filename(filename::String)
@@ -302,6 +303,89 @@ function split_by_season(dates::AbstractArray{<:Dates.DateTime})
     end
 
     return (MAM, JJA, SON, DJF)
+end
+
+"""
+    split_by_season_across_time(dates::AbstractArray{<:Dates.DateTime})
+
+Split `dates` into a vector of vectors of dates split by seasons across time.
+
+Examples
+=========
+
+```jldoctest
+julia> import Dates
+
+julia> dates = collect(Dates.DateTime(2010, i) for i in 1:12);
+
+julia> split_by_season_across_time(dates)
+5-element Vector{Vector{DateTime}}:
+ [DateTime("2010-01-01T00:00:00"), DateTime("2010-02-01T00:00:00")]
+ [DateTime("2010-03-01T00:00:00"), DateTime("2010-04-01T00:00:00"), DateTime("2010-05-01T00:00:00")]
+ [DateTime("2010-06-01T00:00:00"), DateTime("2010-07-01T00:00:00"), DateTime("2010-08-01T00:00:00")]
+ [DateTime("2010-09-01T00:00:00"), DateTime("2010-10-01T00:00:00"), DateTime("2010-11-01T00:00:00")]
+ [DateTime("2010-12-01T00:00:00")]
+"""
+function split_by_season_across_time(dates::AbstractArray{<:Dates.DateTime})
+    # Dates is not necessarily sorted
+    dates = sort(dates)
+
+    # Empty case
+    if length(dates) == 0
+        return Vector{Vector{eltype(dates)}}[]
+    end
+
+    # Find the first date of the season that first(dates) belongs in
+    (first_season, first_year) = find_season_and_year(first(dates))
+    season_to_month = Dict("MAM" => 3, "JJA" => 6, "SON" => 9, "DJF" => 12)
+    first_date_of_season =
+        Dates.DateTime(first_year, season_to_month[first_season], 1)
+
+    # Create an ordered dict to map between season and year to dates
+    # Need to iterate because some seasons can be empty and we want empty arrays for that
+    season_and_year2dates = OrderedDict{
+        Tuple{typeof(first_season), typeof(first_year)},
+        Vector{eltype(dates)},
+    }()
+    curr_date = first_date_of_season
+    while curr_date <= dates[end]
+        (season, year) = find_season_and_year(curr_date)
+        season_and_year2dates[(season, year)] = typeof(curr_date)[]
+        curr_date += Dates.Month(3) # season change by 3 month interval
+    end
+
+    # Add dates to the correct vectors in season_and_year2dates
+    for date in dates
+        (season, year) = find_season_and_year(date)
+        push!(season_and_year2dates[(season, year)], date)
+    end
+    return collect(values(season_and_year2dates))
+end
+
+"""
+    find_season_and_year(date::Dates.DateTime)
+
+Return a tuple of the year and season belong to `date`. The variable `year` is
+an integer and `season` is a string.
+
+The months of the seasons are March to May, June to August, September to
+November, and December to February. If a date is in December to February, the
+year is chosen to be the year that the season starts.
+"""
+function find_season_and_year(date::Dates.DateTime)
+    if Dates.Month(3) <= Dates.Month(date) <= Dates.Month(5)
+        return ("MAM", Dates.year(date))
+    elseif Dates.Month(6) <= Dates.Month(date) <= Dates.Month(8)
+        return ("JJA", Dates.year(date))
+    elseif Dates.Month(9) <= Dates.Month(date) <= Dates.Month(11)
+        return ("SON", Dates.year(date))
+    else
+        # ambiguous what year should be used, so we use the convention that
+        # it is the year of December
+        corrected_year =
+            Dates.month(date) == 12 ? Dates.year(date) : Dates.year(date) - 1
+        return ("DJF", corrected_year)
+    end
 end
 
 """
