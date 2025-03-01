@@ -1973,4 +1973,35 @@ end
     var = ClimaAnalysis.remake(var, data = data, dims = dims)
     @test sprint(show, var) ==
           "Attributes:\n  long_name => hi\nDimension attributes:\n  lat:\n    units => deg\nData defined over:\n  lat with 1 element (1.0)\n  lon with 1 element (2.0)\n"
+
+    # Empty OutputVar
+    dims = OrderedDict{String, Vector{Float64}}()
+    data = Float64[]
+    empty_var = ClimaAnalysis.OutputVar(dims, data)
+    @test sprint(show, empty_var) ==
+          "Attributes:\nDimension attributes:\nData defined over:\n"
+
+    # OutputVar with string in dim_attributes as the value as opposed to another dictionary
+    lat = collect(range(-89.5, 89.5, 180))
+    data = ones(length(lat))
+    dims = OrderedDict(["lat" => lat])
+    attribs = Dict("long_name" => "hi")
+    dim_attribs = OrderedDict([
+        "lat" => Dict(
+            "units" => "deg",
+            "wacky" => Dict("something" => "another thing"),
+        ),
+        "test" => "word",
+    ])
+    var = ClimaAnalysis.OutputVar(attribs, dims, dim_attribs, data)
+    @test sprint(show, var) ==
+          "Attributes:\n  long_name => hi\nDimension attributes:\n  lat:\n    units => deg\n    wacky => Dict(\"something\" => \"another thing\")\n  test:\n    word\nData defined over:\n  lat with 180 elements (-89.5 to 89.5)\n"
+
+    # OutputVar with 0 elements in one of the dimenisions
+    lat = Float64[]
+    data = ones(length(lat))
+    dims = OrderedDict(["lat" => lat])
+    attribs = Dict("long_name" => "hi")
+    dim_attribs = OrderedDict(["lat" => Dict("units" => "deg")])
+    var = ClimaAnalysis.OutputVar(attribs, dims, dim_attribs, data)
 end
